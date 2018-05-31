@@ -106,10 +106,14 @@ void executeAndSendToFile(char* token[], char* input, char* envp[]) {
     newToken[i - 1] = token[i];
   }
   newToken[i - 1] = 0;
+  if (getLength(newToken) > MAX_ARGS + 1) {
+    fprintf(stderr, "Too many arguments, max of %d is allowed\n", MAX_ARGS);
+    return;
+  }
   execve(newToken[0], newToken, envp);
 }
 
-void executeAndPipe(char* token[], char* input, char* envp[], int output) {
+void executeAndPipe(char* token[], char* input, char* envp[]) {
   int pid, status, i;
   int fd[2];
   int arrowIndexes[MAX_PROMPT];
@@ -127,24 +131,11 @@ void executeAndPipe(char* token[], char* input, char* envp[], int output) {
       separateCommand++;
       commandLength = 0;
       if (i == getLength(token) - 1 || strcmp(token[i + 1], "->") == 0) {
-        if (output == 1) {
-          fprintf(stderr,
-                  "command %s must contain an output file following ->\n",
-                  input);
-        } else {
-          fprintf(stderr,
-                  "command %s must contain another command following ->\n",
-                  input);
-        }
+        fprintf(stderr,
+                "command %s must contain another command following ->\n",
+                input);
         return;
       } else {
-        if (i + 2 == getLength(token)) {
-          if (output == 1) {
-            tokens[separateCommand][commandLength] = strdup(token[i + 1]);
-            commandLength++;
-            break;
-          }
-        }
         strcpy(command, token[i + 1]);
         if (!verifyFile(command, input)) {
           return;
@@ -154,6 +145,10 @@ void executeAndPipe(char* token[], char* input, char* envp[], int output) {
     } else {
       tokens[separateCommand][commandLength] = strdup(token[i]);
       commandLength++;
+      if (commandLength > MAX_ARGS + 1) {
+        fprintf(stderr, "Too many arguments, max of %d is allowed\n", MAX_ARGS);
+        return;
+      }
     }
   }
   tokens[separateCommand][commandLength] = 0;
@@ -169,24 +164,7 @@ void executeAndPipe(char* token[], char* input, char* envp[], int output) {
     if ((pid = fork()) == 0) {
       dup2(fdBackup, 0);
       if (i != arrowCounter) {
-        if (i + 1 == arrowCounter && output == 1) {
-          fflush(stdout);
-          if (getLength(tokens) != i + 1) {
-            fprintf(stderr,
-                    "command %s must contain an output file following ->\n",
-                    input);
-          }
-          int fd = open(tokens[i + 1][0], O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-          if (fd == -1) {
-            fprintf(stderr, "cannot open %s for writing\n", tokens[i][0]);
-            return;
-          }
-          dup2(fd, 1);
-          execve(tokens[i][0], tokens[i], envp);
-          exit(0);
-        } else {
-          dup2(fd[1], 1);
-        }
+        dup2(fd[1], 1);
       }
       close(fd[0]);
       execve(tokens[i][0], tokens[i], envp);
@@ -254,8 +232,7 @@ void startShell() {
     tokenize(token, input);
     char command[MAX_PROMPT];
     if ((pid = fork()) == 0) {
-      if ((strcmp(token[0], "OR") == 0) || (strcmp(token[0], "PP") == 0) ||
-          (strcmp(token[0], "ORPP") == 0)) {
+      if ((strcmp(token[0], "OR") == 0) || (strcmp(token[0], "PP") == 0)) {
         if (getLength(token) == 1) {
           fprintf(stderr, "%s: command not found\n", input);
           continue;
@@ -269,13 +246,16 @@ void startShell() {
         if ((strcmp(token[0], "OR") == 0)) {
           executeAndSendToFile(token, input, envp);
         } else if ((strcmp(token[0], "PP") == 0)) {
-          executeAndPipe(token, input, envp, 0);
-        } else if ((strcmp(token[0], "ORPP") == 0)) {
-          executeAndPipe(token, input, envp, 1);
+          executeAndPipe(token, input, envp);
         }
 
       } else {
         strcpy(command, token[0]);
+        if (getLength(token) > MAX_ARGS + 1) {
+          fprintf(stderr, "Too many arguments, max of %d is allowed\n",
+                  MAX_ARGS);
+          continue;
+        }
         if (verifyFile(command, input)) {
           token[0] = command;
           execve(token[0], token, envp);

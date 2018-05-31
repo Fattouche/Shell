@@ -106,6 +106,10 @@ void executeAndSendToFile(char* token[], char* input, char* envp[]) {
     newToken[i - 1] = token[i];
   }
   newToken[i - 1] = 0;
+  if (getLength(newToken) > MAX_ARGS + 1) {
+    fprintf(stderr, "Too many arguments, max of %d is allowed\n", MAX_ARGS);
+    return;
+  }
   execve(newToken[0], newToken, envp);
 }
 
@@ -154,6 +158,10 @@ void executeAndPipe(char* token[], char* input, char* envp[], int output) {
     } else {
       tokens[separateCommand][commandLength] = strdup(token[i]);
       commandLength++;
+      if (commandLength > MAX_ARGS + 1) {
+        fprintf(stderr, "Too many arguments, max of %d is allowed\n", MAX_ARGS);
+        return;
+      }
     }
   }
   tokens[separateCommand][commandLength] = 0;
@@ -276,6 +284,11 @@ void startShell() {
 
       } else {
         strcpy(command, token[0]);
+        if (getLength(token) > MAX_ARGS + 1) {
+          fprintf(stderr, "Too many arguments, max of %d is allowed\n",
+                  MAX_ARGS);
+          continue;
+        }
         if (verifyFile(command, input)) {
           token[0] = command;
           execve(token[0], token, envp);
