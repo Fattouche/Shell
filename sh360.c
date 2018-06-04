@@ -1,6 +1,6 @@
 /*
  * Several ideas and code snippets from sh360.c
- * are taken from Dr.Zastre CSC360, summer 2018 course.
+ * are taken from Dr.Zastre CSC360 appendix code, summer 2018 course.
  */
 
 #include <fcntl.h>
@@ -16,15 +16,17 @@
 #define MAX_NUM_TOKENS 25  // 3 commands * 7 args = 21 + 3 extra
 #define MAX_PROMPT 10
 #define MAX_ARGS 7
-#define MAX_PIPES 3
 #define MAX_PATH_LENGTH 20
 #define MAX_DIRECTORIES 10
+#define MAX_PIPES 2
 
+// Determines whether a file exists or not
 int fileExists(char* filename) {
   struct stat buffer;
   return (stat(filename, &buffer) == 0);
 }
 
+// The main logic for iterating through the RC file to check paths
 int getFile(char* fileName) {
   char fullPathBuff[MAX_PATH_LENGTH + MAX_INPUT_LINE + 1];
   FILE* file = fopen(RC_FILE_NAME, "r");
@@ -58,6 +60,8 @@ int getFile(char* fileName) {
   return 0;
 }
 
+// A Wrapper function around checking if the file exists or not
+// Also updates filename to include path, ie `ls`->`/bin/ls`
 int verifyFile(char* fileName, char* input) {
   char command[MAX_PROMPT];
   strcpy(command, fileName);
@@ -70,10 +74,11 @@ int verifyFile(char* fileName, char* input) {
   }
 }
 
+// Find the index of the symbol that was passed in
 int findIndex(char* symbol, char* token[]) {
   int arrowIndex = 0;
   while (token[arrowIndex] != NULL) {
-    if (strcmp(token[arrowIndex], "->") == 0) {
+    if (strcmp(token[arrowIndex], symbol) == 0) {
       return arrowIndex;
     }
     arrowIndex++;
@@ -81,6 +86,7 @@ int findIndex(char* symbol, char* token[]) {
   return -1;
 }
 
+// Main function for redirecting output to file(OR)
 void executeAndSendToFile(char* token[], char* input, char* envp[]) {
   int fd, pid, status;
   int arrowIndex = findIndex("->", token);
@@ -88,8 +94,10 @@ void executeAndSendToFile(char* token[], char* input, char* envp[]) {
     fprintf(stderr, "command %s must contain ->\n", input);
     return;
   }
-  if (getLength(token) != arrowIndex + 2) {
-    fprintf(stderr, "command %s must contain an output file following the ->\n",
+  if (getLength(token) != arrowIndex + 2 ||
+      strcmp(token[arrowIndex + 1], "->") == 0) {
+    fprintf(stderr,
+            "command %s must contain one output file following the ->\n",
             input);
     return;
   }
@@ -113,6 +121,7 @@ void executeAndSendToFile(char* token[], char* input, char* envp[]) {
   execve(newToken[0], newToken, envp);
 }
 
+// Main function for piping(PP)
 void executeAndPipe(char* token[], char* input, char* envp[]) {
   int pid, status, i;
   int fd[2];
@@ -129,6 +138,10 @@ void executeAndPipe(char* token[], char* input, char* envp[]) {
       tokens[separateCommand][commandLength] = 0;
       arrowCounter++;
       separateCommand++;
+      if (separateCommand > MAX_PIPES) {
+        fprintf(stderr, "Too many pipes, max of %d is allowed\n", MAX_PIPES);
+        return;
+      }
       commandLength = 0;
       if (i == getLength(token) - 1 || strcmp(token[i + 1], "->") == 0) {
         fprintf(stderr,
@@ -176,6 +189,8 @@ void executeAndPipe(char* token[], char* input, char* envp[]) {
   }
 }
 
+// Given string, tokenize it so that spaces are separated into different
+// elements
 void tokenize(char* token[], char* input) {
   int num_tokens = 0;
   for (token[num_tokens] = strtok(input, " "); token[num_tokens] != NULL;
@@ -186,6 +201,7 @@ void tokenize(char* token[], char* input) {
   token[num_tokens] = 0;
 }
 
+// Helper function for getting length of string array
 int getLength(char* token[]) {
   int i = 0;
   while (token[i] != 0) {
@@ -194,6 +210,8 @@ int getLength(char* token[]) {
   return i;
 }
 
+// Called by the main function, this is the main loop for redirecting to
+// different function
 void startShell() {
   char input[MAX_INPUT_LINE];
   char fullPath[MAX_INPUT_LINE + MAX_PATH_LENGTH];
@@ -234,7 +252,10 @@ void startShell() {
     if ((pid = fork()) == 0) {
       if ((strcmp(token[0], "OR") == 0) || (strcmp(token[0], "PP") == 0)) {
         if (getLength(token) == 1) {
-          fprintf(stderr, "%s: command not found\n", input);
+          fprintf(stderr,
+                  "%s: command not found, must have tokens before and after "
+                  "arrows\n",
+                  input);
           continue;
         }
         strcpy(command, token[1]);
