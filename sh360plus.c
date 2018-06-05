@@ -34,18 +34,18 @@
 #define MAX_HISTORY 10
 
 // Determines whether a file exists or not
-int fileExists(char* filename) {
+int fileExists(char* fileName) {
   struct stat buffer;
-  return (stat(filename, &buffer) == 0);
+  return (stat(fileName, &buffer) == 0);
 }
 
 // The main logic for iterating through the RC file to check paths
 int getFile(char* fileName) {
-  char fullPathBuff[MAX_PATH_LENGTH + MAX_INPUT_LINE + 1];
+  char path[MAX_PATH_LENGTH + MAX_INPUT_LINE + 1] = "";
   FILE* file = fopen(RC_FILE_NAME, "r");
   int i;
   int lineCounter = 0;
-  while (fgets(fullPathBuff, MAX_PATH_LENGTH - 1, file)) {
+  while (fgets(path, MAX_PATH_LENGTH, file) != NULL) {
     lineCounter++;
     if (lineCounter == 1) {
       continue;
@@ -54,17 +54,20 @@ int getFile(char* fileName) {
       fclose(file);
       return 0;
     }
-    if (fullPathBuff[strlen(fullPathBuff) - 1] == '\n') {
-      fullPathBuff[strlen(fullPathBuff) - 1] = '\0';
+    if (path[strlen(path) - 2] == '\r') {
+      path[strlen(path) - 2] = '\0';
+    } else if (path[strlen(path) - 1] == '\n') {
+      path[strlen(path) - 1] = '\0';
+    } else {
+      fprintf(stderr, "Path directories must be followed by a new line");
     }
-    int j = 0;
-    for (i = strlen(fullPathBuff) - 1;
-         i < (int)(strlen(fullPathBuff) + strlen(fileName)); i++) {
-      fullPathBuff[i] = fileName[j];
-      j++;
+    if (path[strlen(path) - 1] != '/') {
+      strcat(path, "/");
     }
-    if (fileExists(fullPathBuff)) {
-      strcpy(fileName, fullPathBuff);
+    strcat(path, fileName);
+
+    if (fileExists(path)) {
+      strcpy(fileName, path);
       fclose(file);
       return 1;
     }
@@ -218,6 +221,7 @@ void executeAndPipe(char* token[], char* input, char* envp[], int output) {
           }
           dup2(fd, 1);
           execve(tokens[i][0], tokens[i], envp);
+          // Shouldn't reach this
           exit(0);
         } else {
           dup2(fd[1], 1);
@@ -225,6 +229,7 @@ void executeAndPipe(char* token[], char* input, char* envp[], int output) {
       }
       close(fd[0]);
       execve(tokens[i][0], tokens[i], envp);
+      // Shouldn't reach this
       exit(0);
     }
     waitpid(pid, &status, 0);
@@ -309,7 +314,7 @@ void startShell() {
       continue;
     }
     if (input[0] == '!') {
-      if (getLength(history) < (input[1] - '0')) {
+      if (getLength(history) < (input[1] - '0') || (input[1] - '0') < 0) {
         fprintf(stderr, "%d: event not found\n", (input[1] - '0'));
         continue;
       }
@@ -349,7 +354,7 @@ void startShell() {
         if (getLength(token) > MAX_ARGS + 1) {
           fprintf(stderr, "Too many arguments, max of %d is allowed\n",
                   MAX_ARGS);
-          continue;
+          exit(0);
         }
         if (verifyFile(command, input)) {
           token[0] = command;
